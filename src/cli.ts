@@ -22,6 +22,8 @@ import {
 } from "./api.ts";
 import { downloadAsset } from "./download.ts";
 import { createInterface } from "node:readline/promises";
+import { runTui, safeTerminalText, TuiUserError } from "./tui.ts";
+import { loadTuiTranslator } from "./tuiI18n.ts";
 
 const USAGE = `epic-fab — Epic Games / Fab.com asset library on Linux
 
@@ -30,6 +32,8 @@ Commands:
   list [--json]              List owned Fab assets
   download <asset-id> [...]  Download asset(s) to disk
   sync --project <path>      Bulk-download library into a UE project's Content/
+  tui [--lang <locale>]
+                              Browse, filter, and download assets interactively
   whoami                     Show current authenticated Epic account
   logout                     Delete persisted auth tokens
 
@@ -41,6 +45,7 @@ Options:
   --project <path>           sync: UE project root
   --concurrency <n>          CDN chunk fetch concurrency (default 8)
   --no-skip                  Redownload even when on-disk SHA1 matches
+  --lang <locale>            tui: locale-file name (default: $LANG, fallback en)
 `;
 
 const VERSION = "0.1.0";
@@ -350,6 +355,27 @@ async function cmdSync(argv: ReadonlyArray<string>, engineVersion: string): Prom
   }
 }
 
+async function cmdTui(argv: ReadonlyArray<string>, engineVersion: string): Promise<number> {
+  const translate = await loadTuiTranslator(findFlagValue(argv, "--lang") ?? process.env["LANG"]);
+  const tokens = await loadAndRefresh();
+  if (!tokens) {
+    console.error(translate("not_authenticated"));
+    return EXIT_NOT_AUTHENTICATED;
+  }
+
+  try {
+    const result = await runTui(tokens, {
+      engineVersion,
+      locale: findFlagValue(argv, "--lang"),
+    });
+    return result.downloadFailed ? EXIT_NETWORK_ERROR : EXIT_OK;
+  } catch (err) {
+    const error = safeTerminalText(err instanceof Error ? err.message : String(err));
+    console.error(translate("tui_failed", { error }));
+    return err instanceof TuiUserError ? EXIT_USER_ERROR : EXIT_NETWORK_ERROR;
+  }
+}
+
 async function cmdWhoami(): Promise<number> {
   const tokens = await loadTokens();
   if (!tokens) {
@@ -396,6 +422,8 @@ async function main(argv: string[]): Promise<number> {
       return cmdDownload(rest, engineVersion);
     case "sync":
       return cmdSync(rest, engineVersion);
+    case "tui":
+      return cmdTui(rest, engineVersion);
     case "whoami":
       return cmdWhoami();
     case "logout":

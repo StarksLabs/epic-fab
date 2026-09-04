@@ -77,9 +77,24 @@ Tokens land at `~/.config/epic-fab/auth.json` (mode `600`, never in URLs, never 
 | `epic-fab list` | JSON dump of every owned Fab asset (id, title, type, ownedAt) |
 | `epic-fab download <id> --into <dir>` | Download a single asset to a target directory |
 | `epic-fab sync --project <path>` | Bulk-download library into a UE project's `Content/Fab/` tree |
+| `epic-fab tui` | Browse and filter interactively; `Enter` downloads and `Ctrl+O` opens Fab |
 | `epic-fab logout` | Delete persisted auth tokens |
 
-Every command exits with a meaningful code (`0` OK, `1` user error, `2` not authenticated, `3` network error) and emits JSON on stdout for piping.
+Every command exits with a meaningful code (`0` OK, `1` user error, `2` not authenticated, `3` network error). The non-interactive result commands emit JSON on stdout for piping; `tui` is interactive.
+
+### Interactive TUI
+
+```bash
+epic-fab tui --lang zh-CN
+```
+
+The TUI filters as you type. Use `↑`/`↓` to select, `Enter` to download, `Ctrl+O`
+to open the original Fab listing, `Ctrl+I` to open the selected asset's thumbnail,
+and `Esc` to quit.
+All TUI text lives in [`src/locales/en.json`](./src/locales/en.json) and
+[`src/locales/zh-CN.json`](./src/locales/zh-CN.json). Add any
+`src/locales/<locale>.json` file (for example, `fr-FR.json`) and use
+`epic-fab tui --lang <locale>`; a missing or invalid file falls back to English.
 
 ---
 

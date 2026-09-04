@@ -12,6 +12,8 @@ import { chunkPath, decodeChunkPayload, type ChunkInfo, type ChunkPart } from ".
 export interface DownloadOptions {
   targetDir: string;
   preserveStructure: boolean;
+  /** Suppress the built-in stderr progress lines for an interactive caller. */
+  quiet?: boolean;
   /** Max concurrent CDN chunk fetches. Default 8; Epic CDNs often rate-limit around 16+. */
   concurrency?: number;
   /** Skip files whose on-disk SHA1 already matches the manifest. Default true. */
@@ -368,7 +370,7 @@ export async function downloadAsset(
   };
   const toDownload: PlannedFile[] = [];
 
-  if (skipExisting) {
+  if (skipExisting && !opts.quiet) {
     process.stderr.write(`Checking ${fileTotal} on-disk file(s) for SHA1 match…\n`);
   }
 
@@ -383,7 +385,7 @@ export async function downloadAsset(
       bytesTotal += file.size;
       filesDone += 1;
       skipped += 1;
-      process.stderr.write(`[${filesDone}/${fileTotal}] skip ${relativePath}\n`);
+      if (!opts.quiet) process.stderr.write(`[${filesDone}/${fileTotal}] skip ${relativePath}\n`);
       continue;
     }
 
@@ -391,7 +393,7 @@ export async function downloadAsset(
   }
 
   if (toDownload.length === 0) {
-    process.stderr.write(`Nothing to fetch — all ${skipped} file(s) already match manifest SHA1\n`);
+    if (!opts.quiet) process.stderr.write(`Nothing to fetch — all ${skipped} file(s) already match manifest SHA1\n`);
     return { files: writtenFiles, bytesTotal, skipped };
   }
 
@@ -410,18 +412,20 @@ export async function downloadAsset(
     remainingUses,
   );
 
-  process.stderr.write(
-    `Downloading ${toDownload.length}/${fileTotal} file(s), ${uniqueNeeded} unique chunk(s)` +
-      ` (concurrency ${concurrency}, prefetch window ${prefetchWindow}` +
-      (bases.length > 1 ? `, ${bases.length} CDN bases` : "") +
-      ")…\n",
-  );
+  if (!opts.quiet) {
+    process.stderr.write(
+      `Downloading ${toDownload.length}/${fileTotal} file(s), ${uniqueNeeded} unique chunk(s)` +
+        ` (concurrency ${concurrency}, prefetch window ${prefetchWindow}` +
+        (bases.length > 1 ? `, ${bases.length} CDN bases` : "") +
+        ")…\n",
+    );
+  }
 
   // Kick the first window so the pool is busy before assembly starts.
   primeWindow(cache, order, 0, prefetchWindow);
 
   for (const { file, relativePath, targetPath } of toDownload) {
-    process.stderr.write(`[${filesDone + 1}/${fileTotal}] downloading ${relativePath}…\n`);
+    if (!opts.quiet) process.stderr.write(`[${filesDone + 1}/${fileTotal}] downloading ${relativePath}…\n`);
     const bytes = await assembleFile(
       file,
       cache,
@@ -433,9 +437,11 @@ export async function downloadAsset(
     writtenFiles.push(targetPath);
     bytesTotal += bytes;
     filesDone += 1;
-    process.stderr.write(
-      `[${filesDone}/${fileTotal}] wrote ${relativePath} (${bytes} bytes, cache ${cache.cachedCount()} chunks)\n`,
-    );
+    if (!opts.quiet) {
+      process.stderr.write(
+        `[${filesDone}/${fileTotal}] wrote ${relativePath} (${bytes} bytes, cache ${cache.cachedCount()} chunks)\n`,
+      );
+    }
   }
 
   return { files: writtenFiles, bytesTotal, skipped };
